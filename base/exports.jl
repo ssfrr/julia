@@ -1253,4 +1253,6 @@ export
     @show,
     @printf,
     @sprintf,
-    @deprecate
+    @deprecate,
+    @enum,
+    @enum_mask
