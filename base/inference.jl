@@ -13,6 +13,7 @@ type StaticVarInfo
     sp::Tuple            # static parameters tuple
     cenv::ObjectIdDict   # types of closed vars
     vars::Array{Any,1}   # names of args and locals
+    label_counter::Int   # index of the current highest label for this function
 end
 
 type EmptyCallStack
@@ -551,7 +552,7 @@ function abstract_call_gf(f, fargs, argtypes, e)
                 return Type
             end
         end
-        if f === Main.Base.promote_type
+        if isdefined(Main.Base,:promote_type) && f === Main.Base.promote_type
             try
                 RT = Type{f(c...)}
                 e.head = :call1
@@ -1058,6 +1059,17 @@ function findlabel(body, l)
     error("label ",l," not found")
 end
 
+function label_counter(body)
+    l = 0
+    for b in body
+        if isa(b,LabelNode) && (b::LabelNode).label > l
+            l = (b::LabelNode).label
+        end
+    end
+    l
+end
+genlabel(sv) = ln(sv.label_counter += 1)
+
 f_argnames(ast) =
     map(x->(isa(x,Expr) ? x.args[1] : x), ast.args[1]::Array{Any,1})
 
@@ -1236,7 +1248,7 @@ function typeinf(linfo::LambdaStaticData,atypes::Tuple,sparams::Tuple, def, cop)
             s[1][vname] = vtype
         end
     end
-    sv = StaticVarInfo(sparams, cenv, vars)
+    sv = StaticVarInfo(sparams, cenv, vars, label_counter(body))
     frame.sv = sv
 
     # exception handlers
@@ -1373,10 +1385,10 @@ function typeinf(linfo::LambdaStaticData,atypes::Tuple,sparams::Tuple, def, cop)
     if (toprec && typeseq(curtype, frame.result)) || !isa(frame.prev,CallStack)
         rec = false
     end
-    
     fulltree = type_annotate(ast, s, sv, frame.result, args)
     
     if !rec
+        @assert fulltree.args[3].head === :body
         fulltree.args[3] = inlining_pass(fulltree.args[3], sv, fulltree)[1]
         # inlining can add variables
         sv.vars = append_any(f_argnames(fulltree), fulltree.args[2][1])
@@ -1547,13 +1559,28 @@ function sym_replace(e::ANY, from1, from2, to1, to2)
         return _sym_repl(e::Symbol, from1, from2, to1, to2, e)
     end
     if isa(e,SymbolNode)
-        return _sym_repl(e.name, from1, from2, to1, to2, e)
+        e2 = _sym_repl(e.name, from1, from2, to1, to2, e)
+        if isa(e2, SymbolNode) || !isa(e2, Symbol)
+            return e2
+        else
+            return SymbolNode(e2, e.typ)
+        end
     end
     if !isa(e,Expr)
         return e
     end
     e = e::Expr
-    if !is(e.head,:line)
+    if e.head === :(=)
+        # remove_redundant_temp_vars can only handle Symbols
+        # on the LHS of assignments, so we make sure not to put
+        # something else there
+        e2 = _sym_repl(e.args[1]::Symbol, from1, from2, to1, to2, e.args[1])
+        if isa(e2, SymbolNode)
+            e2 = e2.name
+        end
+        e.args[1] = e2::Symbol
+        e.args[2] = sym_replace(e.args[2], from1, from2, to1, to2)
+    elseif e.head !== :line
         for i=1:length(e.args)
             e.args[i] = sym_replace(e.args[i], from1, from2, to1, to2)
         end
@@ -1716,20 +1743,16 @@ function effect_free(e::ANY, sv)
     return false
 end
 
-# for now, only inline functions whose bodies are of the form "return <expr>"
-# where <expr> doesn't contain any argument more than once.
+# inline functions whose bodies "inline_worthy"
+# where the function body doesn't contain any argument more than once.
 # functions with closure environments or varargs are also excluded.
 # static parameters are ok if all the static parameter values are leaf types,
 # meaning they are fully known.
-function inlineable(f, e::Expr, sv, enclosing_ast)
+function inlineable(f, e::Expr, atypes, sv, enclosing_ast)
     if !(isa(f,Function) || isstructtype(f) || isa(f,IntrinsicFunction))
         return NF
     end
     argexprs = e.args[2:]
-    atypes = tuple(map(exprtype, argexprs)...)
-    if length(atypes) > MAX_TUPLETYPE_LEN
-        atypes = limit_tuple_type(atypes)
-    end
 
     if is(f, convert_default) && length(atypes)==3
         # builtin case of convert. convert(T,x::S) => x, when S<:T
@@ -1753,7 +1776,7 @@ function inlineable(f, e::Expr, sv, enclosing_ast)
         if (is(f,apply_type) || is(f,fieldtype) ||
             (isdefined(Main.Base,:typejoin) && is(f,Main.Base.typejoin)) ||
             (isdefined(Main.Base,:promote_type) && is(f,Main.Base.promote_type))) &&
-            isleaftype(e.typ.parameters[1])
+                isleaftype(e.typ.parameters[1])
             return (e.typ.parameters[1],())
         end
         if is(f,Union)
@@ -1834,63 +1857,99 @@ function inlineable(f, e::Expr, sv, enclosing_ast)
         needcopy = false
     end
     ast = ast::Expr
-    for vi in ast.args[2][2]
+    vinflist = ast.args[2][2]::Array{Any,1}
+    for vi in vinflist
         if (vi[3]&1)!=0
             # captures variables (TODO)
             return NF
         end
     end
-    body = without_linenums(ast.args[3].args)::Array{Any,1}
-    # see if body is only "return <expr>"
-    if length(body) != 1
+
+    body = Expr(:block)
+    body.args = without_linenums(ast.args[3].args)::Array{Any,1}
+    if !inline_worthy(body)
         return NF
     end
-    assert(isa(body[1],Expr))
-    assert(is(body[1].head,:return))
+
     # check for vararg function
     args = f_argnames(ast)
-    expr = body[1].args[1]
     na = length(args)
 
     if na>0 && is_rest_arg(ast.args[1][na])
         vaname = args[na]
         len_argexprs = length(argexprs)
         valen = len_argexprs-na+1
-        if valen>0 && !occurs_outside_tupleref(expr, vaname, sv, valen)
+        if valen>0 && !occurs_outside_tupleref(body, vaname, sv, valen)
             # argument tuple is not used as a whole, so convert function body
             # to one accepting the exact number of arguments we have.
             newnames = unique_names(ast,valen)
             if needcopy
-                expr = astcopy(expr); needcopy = false
+                body = astcopy(body)
+                needcopy = false
             end
-            replace_tupleref!(ast, Expr(:return, expr), vaname, newnames, sv, 1)
+            replace_tupleref!(ast, body, vaname, newnames, sv, 1)
             args = vcat(args[1:na-1], newnames)
+            na = length(args)
         else
             # construct tuple-forming expression for argument tail
             vararg = mk_tuplecall(argexprs[na:end])
             argexprs = {argexprs[1:(na-1)]..., vararg}
         end
     end
+    @assert na == length(argexprs)
 
-    # avoid capture if the function has free variables with the same name
-    # as our vars
-    if occurs_more(expr, x->(isa(x,Symbol)&&!is_global(sv,x)&&!contains_is(args,x)), 0) > 0
-        return NF
+    if needcopy
+        body = astcopy(body)
     end
 
+    spnames = { sp[i].name for i=1:2:length(sp) }
+
+    # avoid capturing free variables in enclosing function with the same name as in our function
+    enc_vinflist = enclosing_ast.args[2][2]::Array{Any,1}
+    enc_locllist = enclosing_ast.args[2][1]::Array{Any,1}
+    locllist = ast.args[2][1]::Array{Any,1}
+    for localval in locllist
+        localval = localval::Symbol
+        vnew = unique_name(enclosing_ast, ast)
+        push!(spnames, localval)
+        push!(spvals, vnew)
+        push!(enc_locllist, vnew)
+        for vi in vinflist
+            if vi[1] === localval
+                push!(enc_vinflist, {vnew, vi[2], vi[3]})
+            end
+        end
+    end
+    
     stmts = {}
     # see if each argument occurs only once in the body expression
     for i=1:length(args)
         a = args[i]
-        occ = occurs_more(expr, x->is(x,a), 1)
-        if occ != 1
-            aei = argexprs[i]; aeitype = exprtype(aei)
+        aei = argexprs[i]
+        aeitype = exprtype(aei)
+
+        islocal = false # if the argument name is also used as a local variable,
+                        # we need to keep it as a variable name
+        for vi in vinflist
+            if vi[1] === a && vi[3] != 0
+                if !islocal
+                    islocal = true
+                end
+                aeitype = tmerge(aeitype, vi[2])
+                if aeitype === Any
+                    break
+                end
+            end
+        end
+
+        occ = occurs_more(body, x->is(x,a), 1)
+        if occ != 1 || islocal
             # ok for argument to occur more than once if the actual argument
             # is a symbol or constant
-            if !effect_free(aei,sv) || (occ==0 && is(aeitype,None))
+            if islocal || !effect_free(aei,sv) || (occ==0 && is(aeitype,None))
                 # introduce variable for this argument
-                if occ > 1
-                    vnew = unique_name(enclosing_ast)
+                if occ != 0
+                    vnew = unique_name(enclosing_ast, ast)
                     add_variable(enclosing_ast, vnew, aeitype)
                     push!(stmts, Expr(:(=), vnew, aei))
                     argexprs[i] = aeitype===Any ? vnew : SymbolNode(vnew,aeitype)
@@ -1902,18 +1961,100 @@ function inlineable(f, e::Expr, sv, enclosing_ast)
     end
 
     # ok, substitute argument expressions for argument names in the body
-    spnames = { sp[i].name for i=1:2:length(sp) }
-    if needcopy; expr = astcopy(expr); end
     mfrom = linfo.module; mto = (inference_stack::CallStack).mod
     if !is(mfrom, mto)
-        expr = resolve_globals(expr, mfrom, mto, args, spnames)
+        body = resolve_globals(body, mfrom, mto, args, spnames)
     end
-    return (sym_replace(expr, args, spnames, argexprs, spvals), stmts)
+    body = sym_replace(body, args, spnames, argexprs, spvals)
+
+    # make labels / goto statements unique
+    newlabels = zeros(Int,label_counter(body.args)+1)
+    for i = 1:length(body.args)
+        a = body.args[i]
+        if isa(a,LabelNode)
+            a = a::LabelNode
+            newlabel = genlabel(sv)
+            newlabels[a.label+1] = newlabel.label
+            body.args[i] = newlabel
+        end
+    end
+    for i = 1:length(body.args)
+        a = body.args[i]
+        if isa(a,GotoNode)
+            a = a::GotoNode
+            body.args[i] = gn(newlabels[a.label+1])
+        elseif isa(a,Expr)
+            a = a::Expr
+            if a.head === :enter
+                a.args[1] = newlabels[a.args[1]+1]
+            elseif a.head === :gotoifnot
+                a.args[2] = newlabels[a.args[2]+1]
+            end
+        end
+    end
+
+    # convert return statements into a series of goto's
+    retstmt = genlabel(sv)
+    retval = unique_name(enclosing_ast, ast)
+    multiret = false
+    lastexpr = pop!(body.args)
+    if isa(lastexpr,LabelNode)
+        push!(body.args, lastexpr)
+        push!(body.args, Expr(:call,:error,"fatal error in type inference"))
+        lastexpr = nothing
+    else
+        @assert isa(lastexpr,Expr) "inference.jl:1774"
+        @assert is(lastexpr.head,:return) "inference.jl:1775"
+    end
+    for a in body.args
+        push!(stmts, a)
+        if isa(a,Expr)
+            a = a::Expr
+            if a.head === :return
+                multiret = true
+                unshift!(a.args, retval)
+                a.head = :(=)
+                push!(stmts, gn(retstmt))
+            end
+        end
+    end
+    if multiret
+        rettype = exprtype(ast.args[3])
+        add_variable(enclosing_ast, retval, rettype)
+        if lastexpr !== nothing
+            unshift!(lastexpr.args, retval)
+            lastexpr.head = :(=)
+            push!(stmts, lastexpr)
+        end
+        push!(stmts, retstmt)
+        expr = rettype===Any ? retval : SymbolNode(retval,rettype)
+    else
+        expr = lastexpr.args[1]
+    end
+    return (expr, stmts)
+end
+
+function inline_worthy(body::Expr)
+    # see if body is only "return <expr>", or is otherwise considered worth inlining
+    if length(body.args) == 1
+        return true
+    end
+#    if isa(body.args[1],QuoteNode) && (body.args[1]::QuoteNode).value === :inline
+#        shift!(body.args)
+#        return true
+#    end
+    if length(body.args) < 10 && occurs_more(body, e->true, 30) < 30
+        return true
+    end
+    return false
 end
 
 tn(sym::Symbol) =
     ccall(:jl_new_struct, Any, (Any,Any...), TopNode, sym, Any)
 qn(v) = ccall(:jl_new_struct, Any, (Any,Any...), QuoteNode, v)
+ln(v) = ccall(:jl_new_struct, Any, (Any,Any...), LabelNode, v)
+gn(v) = ccall(:jl_new_struct, Any, (Any,Any...), GotoNode, v)
+gn(v::LabelNode) = ccall(:jl_new_struct, Any, (Any,Any...), GotoNode, v.label)
 
 const top_tupleref = tn(:tupleref)
 const top_tuple = tn(:tuple)
@@ -2012,7 +2153,11 @@ function inlining_pass(e::Expr, sv, ast)
         end
 
         for ninline = 1:100
-            res = inlineable(f, e, sv, ast)
+            atypes = tuple(map(exprtype, e.args[2:])...)
+            if length(atypes) > MAX_TUPLETYPE_LEN
+                atypes = limit_tuple_type(atypes)
+            end
+            res = inlineable(f, e, atypes, sv, ast)
             if isa(res,Tuple)
                 if isa(res[2],Array)
                     append!(stmts,res[2])
@@ -2024,7 +2169,7 @@ function inlining_pass(e::Expr, sv, ast)
                 # iteratively inline apply(f, tuple(...), tuple(...), ...) in order
                 # to simplify long vararg lists as in multi-arg +
                 if isa(res,Expr) && is_known_call(res, apply, sv)
-                    e = res
+                    e = res::Expr
                     f = apply
                 else
                     return (res,stmts)
@@ -2087,6 +2232,22 @@ function unique_name(ast)
     end
     g = gensym()
     while contains_is(locllist, g)
+        g = gensym()
+    end
+    g
+end
+function unique_name(ast1, ast2)
+    locllist1 = ast1.args[2][1]::Array{Any,1}
+    locllist2 = ast2.args[2][1]::Array{Any,1}
+    for g in some_names
+        if !contains_is(locllist1, g) &&
+           !contains_is(locllist2, g)
+            return g
+        end
+    end
+    g = gensym()
+    while contains_is(locllist1, g) |
+          contains_is(locllist2, g)
         g = gensym()
     end
     g
@@ -2161,10 +2322,10 @@ function remove_redundant_temp_vars(ast, sa)
                 # this transformation is not valid for vars used before def.
                 # we need to preserve the point of assignment to know where to
                 # throw errors (issue #4645).
-                delete_var!(ast, v)
-                sym_replace(ast.args[3], {v}, {}, {init}, {})
-            end
+            delete_var!(ast, v)
+            sym_replace(ast.args[3], {v}, {}, {init}, {})
         end
+    end
     end
     ast
 end
