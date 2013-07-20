@@ -165,12 +165,15 @@ function getindex(T::NonTupleType, vals...)
     return a
 end
 
+if _oldstyle_array_vcat_
 # T[a:b] and T[a:s:b] also contruct typed ranges
 function getindex{T<:Number}(::Type{T}, r::Ranges)
+    warn_once("T[a:b] concatenation is deprecated; use T[a:b;] instead")
     copy!(Array(T,length(r)), r)
 end
 
 function getindex{T<:Number}(::Type{T}, r1::Ranges, rs::Ranges...)
+    warn_once("T[a:b,...] concatenation is deprecated; use T[a:b;...] instead")
     a = Array(T,length(r1)+sum(length,rs))
     o = 1
     copy!(a, r1, o)
@@ -180,6 +183,7 @@ function getindex{T<:Number}(::Type{T}, r1::Ranges, rs::Ranges...)
         o += length(r)
     end
     return a
+end
 end
 
 function fill!{T<:Union(Int8,Uint8)}(a::Array{T}, x::Integer)
