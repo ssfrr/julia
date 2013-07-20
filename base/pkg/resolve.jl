@@ -647,7 +647,7 @@ type Graph
             bmt[v0,end] = false
         end
 
-        perm = [1:np]
+        perm = [1:np;]
 
         return new(gadj, gmsk, gdir, adjdict, spp, perm, np)
     end

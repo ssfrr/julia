@@ -241,7 +241,7 @@ function rmprocs(args...; waitfor = 0.0)
     global rmprocset
     empty!(rmprocset)
     
-    for i in [args...]
+    for i in vcat(args...)
         if haskey(map_pid_wrkr, i)
             add!(rmprocset, i)
             remote_do(i, exit)
@@ -1260,7 +1260,7 @@ function pmap(f, lsts...; err_retry=true, err_stop=false)
     np = nprocs()
     n = length(lsts[1])
     results = cell(n)
-    queue = [1:n]
+    queue = [1:n;]
     
     task_in_err = false
     is_task_in_error() = task_in_err

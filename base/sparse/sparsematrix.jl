@@ -359,8 +359,8 @@ speye{T}(S::SparseMatrixCSC{T}) = speye(T, size(S, 1), size(S, 2))
 
 function speye(T::Type, m::Integer, n::Integer)
     x = min(m,n)
-    rowval = [1:x]
-    colptr = [rowval, fill(int(x+1), n+1-x)]
+    rowval = [1:x;]
+    colptr = [rowval; fill(int(x+1), n+1-x)]
     nzval  = ones(T, x)
     return SparseMatrixCSC(m, n, colptr, rowval, nzval)
 end
@@ -889,7 +889,7 @@ end
 function getindex{Tv,Ti}(A::SparseMatrixCSC{Tv,Ti}, I::AbstractVector, J::AbstractVector)
     m = size(A, 1)
 
-    if isa(I, Range) || isa(I, Range1); I = [I]; end
+    if isa(I, Range) || isa(I, Range1); I = [I;]; end
 
     if I == 1:m
         return getindex_cols(A, J)

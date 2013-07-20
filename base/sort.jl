@@ -366,7 +366,7 @@ sort!(v::AbstractVector; alg::Algorithm=defalg(v),
 
 sortperm(v::AbstractVector; alg::Algorithm=defalg(v),
     lt::Function=isless, by::Function=identity, rev::Bool=false, order::Ordering=Forward) =
-    sort!([1:length(v)], alg, Perm(ord(lt,by,rev,order),v))
+    sort!([1:length(v);], alg, Perm(ord(lt,by,rev,order),v))
 
 sort(v::AbstractVector; kws...) = sort!(copy(v); kws...)
 

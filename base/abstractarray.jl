@@ -525,7 +525,7 @@ function circshift(a, shiftamts)
     for i=1:n
         s = size(a,i)
         d = i<=length(shiftamts) ? shiftamts[i] : 0
-        I[i] = d==0 ? (1:s) : mod([-d:s-1-d], s)+1
+        I[i] = d==0 ? (1:s) : mod([-d:s-1-d;], s)+1
     end
     a[I...]::typeof(a)
 end
@@ -1248,7 +1248,7 @@ prod{T}(A::AbstractArray{T}, region) = reducedim(*,A,region,one(T))
 all(A::AbstractArray{Bool}, region) = reducedim(all,A,region,true)
 any(A::AbstractArray{Bool}, region) = reducedim(any,A,region,false)
 sum(A::AbstractArray{Bool}, region) = reducedim(+,A,region,0,similar(A,Int,reduced_dims(A,region)))
-sum(A::AbstractArray{Bool}) = sum(A, [1:ndims(A)])[1]
+sum(A::AbstractArray{Bool}) = sum(A, [1:ndims(A);])[1]
 prod(A::AbstractArray{Bool}) =
     error("use all() instead of prod() for boolean arrays")
 prod(A::AbstractArray{Bool}, region) =
@@ -1392,7 +1392,7 @@ function mapslices(f::Function, A::AbstractArray, dims::AbstractVector)
 
     dimsA = [size(A)...]
     ndimsA = ndims(A)
-    alldims = [1:ndimsA]
+    alldims = [1:ndimsA;]
 
     if dims == alldims
         return f(A)

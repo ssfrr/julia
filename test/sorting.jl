@@ -25,8 +25,8 @@
 @test searchsorted([1, 1, 2, 2, 3, 3], 4) == 7:6
 @test searchsorted([1.0, 1, 2, 2, 3, 3], 2.5) == 5:4
 
-rg = 49:57; rgv = [rg]
-rg_r = 57:-1:49; rgv_r = [rg_r]
+rg = 49:57; rgv = [rg;]
+rg_r = 57:-1:49; rgv_r = [rg_r;]
 for i = 47:59
     @test searchsortedfirst(rg, i) == searchsortedfirst(rgv, i)
     @test searchsortedlast(rg, i) == searchsortedlast(rgv, i)
@@ -35,8 +35,8 @@ for i = 47:59
     @test searchsortedlast(rg_r, i, rev=true) ==
           searchsortedlast(rgv_r, i, rev=true)
 end
-rg = 1:2:17; rgv = [rg]
-rg_r = 17:-2:1; rgv_r = [rg_r]
+rg = 1:2:17; rgv = [rg;]
+rg_r = 17:-2:1; rgv_r = [rg_r;]
 for i = -1:19
     @test searchsortedfirst(rg, i) == searchsortedfirst(rgv, i)
     @test searchsortedlast(rg, i) == searchsortedlast(rgv, i)
@@ -45,8 +45,8 @@ for i = -1:19
     @test searchsortedlast(rg_r, i, rev=true) ==
           searchsortedlast(rgv_r, i, rev=true)
 end
-rg = -3:0.5:2; rgv = [rg]
-rg_r = 2:-0.5:-3; rgv_r = [rg_r]
+rg = -3:0.5:2; rgv = [rg;]
+rg_r = 2:-0.5:-3; rgv_r = [rg_r;]
 for i = -5:.5:4
     @test searchsortedfirst(rg, i) == searchsortedfirst(rgv, i)
     @test searchsortedlast(rg, i) == searchsortedlast(rgv, i)
@@ -56,8 +56,8 @@ for i = -5:.5:4
           searchsortedlast(rgv_r, i, rev=true)
 end
 
-rg = 3+0*(1:5); rgv = [rg]
-rg_r = rg; rgv_r = [rg_r]
+rg = 3+0*(1:5); rgv = [rg;]
+rg_r = rg; rgv_r = [rg_r;]
 for i = 2:4
     @test searchsortedfirst(rg, i) == searchsortedfirst(rgv, i)
     @test searchsortedlast(rg, i) == searchsortedlast(rgv, i)
@@ -150,7 +150,7 @@ end
 
 srand(0xdeadbeef)
 
-for n in [0:10, 100, 1000]
+for n in [0:10; 100; 1000]
     r = 1:10
     v = rand(1:10,n)
     h = hist(v,r)

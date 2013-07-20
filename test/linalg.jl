@@ -391,7 +391,7 @@ for elty in (Float32, Float64, Complex64, Complex128)
         end
 
         # The determinant of a rotation matrix should always be 1.
-        for theta = convert(Vector{elty}, pi ./ [1:4])
+        for theta = convert(Vector{elty}, pi ./ [1:4;])
             R = [cos(theta) -sin(theta);
                  sin(theta) cos(theta)]
             @test_approx_eq convert(elty, det(R)) one(elty)

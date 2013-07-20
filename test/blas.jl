@@ -11,8 +11,8 @@ for elty in (Float32, Float64, Complex64, Complex128)
 
     elm1 = convert(elty, -1)    
     el2 = convert(elty, 2)
-    v14 = convert(Vector{elty}, [1:4])
-    v41 = convert(Vector{elty}, [4:-1:1])    
+    v14 = convert(Vector{elty}, [1:4;])
+    v41 = convert(Vector{elty}, [4:-1:1;])
                                         # gemv
     @assert all(LinAlg.BLAS.gemv('N', I4, o4) .== o4)
     @assert all(LinAlg.BLAS.gemv('T', I4, o4) .== o4)
