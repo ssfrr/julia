@@ -7,10 +7,6 @@ typealias AbstractMatrix{T} AbstractArray{T,2}
 
 vect() = Array(None, 0)
 vect{T}(X::T...) = T[ X[i] for i=1:length(X) ]
-function _vect(X...)
-    T = promote_type(map(typeof, X)...)
-    T[ X[i] for i=1:length(X) ]
-end
 
 const _oldstyle_array_vcat_ = true
 
@@ -42,7 +38,10 @@ if _oldstyle_array_vcat_
         vcat(X...)
     end
 else
-    vect(X...) = _vect(X...)
+    function vect(X...)
+        T = promote_type(map(typeof, X)...)
+        T[ X[i] for i=1:length(X) ]
+    end
 end
 
 size{T,n}(t::AbstractArray{T,n}, d) = (d>n ? 1 : size(t)[d])
