@@ -5,6 +5,14 @@ dir = mktempdir()
 file = joinpath(dir, "afile.txt")
 close(open(file,"w")) # like touch, but lets the operating system update the timestamp for greater precision on some platforms (windows)
 
+link = joinpath(dir, "afilelink.txt")
+symlink(file, link)
+
+subdir = joinpath(dir, "adir")
+dirlink = joinpath(dir, "dirlink")
+mkdir(subdir)
+symlink(subdir, dirlink)
+
 #######################################################################
 # This section tests some of the features of the stat-based file info #
 #######################################################################
@@ -31,6 +39,11 @@ end
     @test filesize(dir) > 0
 end
 @test int(time()) >= int(mtime(file)) >= int(mtime(dir)) >= 0 # 1 second accuracy should be sufficient
+
+# test links
+@test islink(link) == true
+@test islink(dirlink) == true
+@test isdir(dirlink) == true
 
 # rename file
 newfile = joinpath(dir, "bfile.txt")
@@ -162,7 +175,10 @@ rm(emptyfile)
 ############
 # Clean up #
 ############
+rm(link)
 rm(file)
+rm(dirlink)
+rmdir(subdir)
 rmdir(dir)
 @test ispath(file) == false
 @test ispath(dir) == false

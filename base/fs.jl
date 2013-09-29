@@ -20,6 +20,7 @@ export File,
        # close,
        write,
        unlink,
+       symlink,
        JL_O_WRONLY,
        JL_O_RDONLY,
        JL_O_RDWR,
@@ -100,6 +101,14 @@ function unlink(f::File)
     end
     unlink(f.path)
     f
+end
+
+@windows_only const UV_FS_SYMLINK_DIR = 0x0001
+function symlink(p::String, np::String)
+    flags = 0
+    @windows_only if isdir(p); flags |= UV_FS_SYMLINK_DIR; end
+    err = ccall(:jl_fs_symlink, Int32, (Ptr{Uint8}, Ptr{Uint8}, Cint), bytestring(p), bytestring(np), flags)
+    uv_error("symlink",err)
 end
 
 function write(f::File, buf::Ptr{Uint8}, len::Integer, offset::Integer=-1)
