@@ -16,13 +16,11 @@ function Triangular(A::Matrix)
 end
 
 size(A::Triangular, args...) = size(A.UL, args...)
-function full(A::Triangular)
-    if 
-        istril(A) return tril(A.UL)
-    else
-        return triu(A.UL)
-    end
-end
+
+#Converting from Triangular to dense Matrix
+convert(::Type{Matrix}, A::Triangular) = full(A)
+full(A::Triangular) = istril(A) ? tril(A.UL) : triu(A.UL)
+
 print_matrix(io::IO, A::Triangular, rows::Integer, cols::Integer) = print_matrix(io, full(A), rows, cols)
 
 istril(A::Triangular) = A.uplo == 'L'
@@ -68,3 +66,41 @@ function inv{T<:BlasFloat}(A::Triangular{T})
     return Ainv
 end
 inv(A::Triangular) = inv(Triangular(float(A.UL), A.uplo, A.unitdiag))
+diag(A::Triangular) = diag(A.UL)
+getindex(A::Triangular,m::Int,n::Int) = getindex(A.UL, m, n)
+
+#######################
+# Eigenvalues/vectors #
+#######################
+
+eigvals(A::Triangular) = A.uplo=='U' ? diag(A) : reverse(diag(A))
+function eigvecs{T<:BlasFloat}(A::Triangular{T})
+  V = LAPACK.trevc!('R', 'A', Array(Bool,1), A.uplo=='U' ? A.UL : transpose(A.UL),
+    Array(T,size(A)), Array(T, size(A)))
+  if A.uplo=='L' #This is the transpose of the Schur form
+    #The eigenvectors must be transformed
+    VV = inv(Triangular(transpose(V)))
+    N = size(V,2)
+    for i=1:N #Reorder eigenvectors to follow LAPACK convention
+      V[:,i]=VV[:,N+1-i]
+    end
+  end
+  #Need to normalize
+  for i=1:size(V,2)
+    V[:,i] /= norm(V[:,i])
+  end
+  V
+end
+eig(M::Triangular) = eigvals(M), eigvecs(M)
+eigfact(M::Triangular) = Eigen(eigvals(M), eigvecs(M))
+
+#############################
+# Singular values / vectors #
+#############################
+
+svd(M::Triangular) = svd(full(M))
+svdfact(M::Triangular) = svdfact(full(M))
+svdfact!(M::Triangular) = svdfact!(full(M))
+svdvals(M::Triangular) = svdvals(full(M))
+svdvecs(M::Triangular) = svdvecs(full(M))
+
