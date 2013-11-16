@@ -38,13 +38,13 @@ function unsafe_copy!{T}(dest::Array{T}, dsto, src::Array{T}, so, N)
         unsafe_copy!(pointer(dest, dsto), pointer(src, so), N)
     else
         for i=0:N-1
-            arrayset(dest, src[i+so], i+dsto)
+            @inbounds arrayset(dest, src[i+so], i+dsto)
         end
     end
     return dest
 end
 
-function copy!{T}(dest::Array{T}, dsto, src::Array{T}, so, N)
+function copy!{T}(dest::Array{T}, dsto::Integer, src::Array{T}, so::Integer, N::Integer)
     if so+N-1 > length(src) || dsto+N-1 > length(dest) || dsto < 1 || so < 1
         throw(BoundsError())
     end
@@ -121,7 +121,7 @@ function reinterpret{T,S,N}(::Type{T}, a::Array{S}, dims::NTuple{N,Int})
     end
     nel = div(length(a)*sizeof(S),sizeof(T))
     if prod(dims) != nel
-        error("reinterpret: invalid dimensions")
+        error("reinterpret: array size must not change")
     end
     ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
 end
@@ -129,7 +129,7 @@ reinterpret(t::Type,x) = reinterpret(t,[x])[1]
 
 function reshape{T,N}(a::Array{T}, dims::NTuple{N,Int})
     if prod(dims) != length(a)
-        error("reshape: invalid dimensions")
+        error("reshape: dimensions must be consistent with array size")
     end
     ccall(:jl_reshape_array, Array{T,N}, (Any, Any, Any), Array{T,N}, a, dims)
 end
@@ -165,10 +165,10 @@ end
 function getindex{T<:Number}(::Type{T}, r1::Ranges, rs::Ranges...)
     a = Array(T,length(r1)+sum(length,rs))
     o = 1
-    copy!(a, r1, o)
+    copy!(a, o, r1)
     o += length(r1)
     for r in rs
-        copy!(a, r, o)
+        copy!(a, o, r)
         o += length(r)
     end
     return a
@@ -205,16 +205,16 @@ infs(dims...)               = fill!(Array(Float64, dims...), Inf)
 nans{T}(::Type{T}, dims...) = fill!(Array(T, dims...), nan(T))
 nans(dims...)               = fill!(Array(Float64, dims...), NaN)
 
-function eye(T::Type, m::Int, n::Int)
+function eye(T::Type, m::Integer, n::Integer)
     a = zeros(T,m,n)
     for i = 1:min(m,n)
         a[i,i] = one(T)
     end
     return a
 end
-eye(m::Int, n::Int) = eye(Float64, m, n)
-eye(T::Type, n::Int) = eye(T, n, n)
-eye(n::Int) = eye(Float64, n)
+eye(m::Integer, n::Integer) = eye(Float64, m, n)
+eye(T::Type, n::Integer) = eye(T, n, n)
+eye(n::Integer) = eye(Float64, n)
 eye{T}(x::AbstractMatrix{T}) = eye(T, size(x, 1), size(x, 2))
 
 function one{T}(x::AbstractMatrix{T})
@@ -251,23 +251,23 @@ convert{T,n}(::Type{Array{T,n}}, x::Array{T,n}) = x
 convert{T,n,S}(::Type{Array{T}}, x::Array{S,n}) = convert(Array{T,n}, x)
 convert{T,n,S}(::Type{Array{T,n}}, x::Array{S,n}) = copy!(similar(x,T), x)
 
-function collect{T}(itr::T)
-    if method_exists(length,(T,))
-        if !method_exists(eltype,(T,))
-            return [x for x in itr]
-        end
-        i, a = 0, Array(eltype(itr),length(itr))
+function collect{C}(T::Type, itr::C)
+    if method_exists(length,(C,))
+        a = Array(T,length(itr))
+        i = 0
         for x in itr
             a[i+=1] = x
         end
-        return a
     else
-        a = Array(eltype(itr),0)
+        a = Array(T,0)
         for x in itr
             push!(a,x)
         end
-        return a
     end
+    return a
+end
+function collect{C}(itr::C)
+    method_exists(eltype,(C,)) ? collect(eltype(itr),itr) : [x for x in itr]
 end
 
 ## Indexing: getindex ##
@@ -668,23 +668,27 @@ function push!(a::Array{Any,1}, item::ANY)
     return a
 end
 
-function append!{T}(a::Array{T,1}, items::Vector)
+function append!{T}(a::Array{T,1}, items::AbstractVector)
     if is(T,None)
         error(_grow_none_errmsg)
     end
     n = length(items)
     ccall(:jl_array_grow_end, Void, (Any, Uint), a, n)
-    a[end-n+1:end] = items
+    copy!(a, length(a)-n+1, items, 1, n)
     return a
 end
 
-function prepend!{T}(a::Array{T,1}, items::Array{T,1})
+function prepend!{T}(a::Array{T,1}, items::AbstractVector)
     if is(T,None)
         error(_grow_none_errmsg)
     end
     n = length(items)
     ccall(:jl_array_grow_beg, Void, (Any, Uint), a, n)
-    a[1:n] = items
+    if a === items
+        copy!(a, 1, items, n+1, n)
+    else
+        copy!(a, 1, items, 1, n)
+    end
     return a
 end
 
@@ -1526,7 +1530,8 @@ function transpose!{T<:Number}(B::Matrix{T}, A::Matrix{T})
     if size(B) != (n,m)
         error("Size of output is incorrect")
     end
-    blocksize = ifloor(sqrthalfcache/sizeof(T)/1.4) # /1.4 to avoid complete fill of cache
+    elsz = isbits(T) ? sizeof(T) : sizeof(Ptr)
+    blocksize = ifloor(sqrthalfcache/elsz/1.4) # /1.4 to avoid complete fill of cache
     if m*n <= 4*blocksize*blocksize
         # For small sizes, use a simple linear-indexing algorithm
         for i2 = 1:n
@@ -1567,18 +1572,17 @@ ctranspose(x::StridedVecOrMat) = transpose(x)
 transpose(x::StridedVector) = [ x[j] for i=1, j=1:size(x,1) ]
 transpose(x::StridedMatrix) = [ x[j,i] for i=1:size(x,2), j=1:size(x,1) ]
 
-ctranspose{T<:Number}(x::StridedVector{T}) = [ conj(x[j]) for i=1, j=1:size(x,1) ]
-ctranspose{T<:Number}(x::StridedMatrix{T}) = [ conj(x[j,i]) for i=1:size(x,2), j=1:size(x,1) ]
+ctranspose{T<:Number}(x::StridedVector{T}) = T[ conj(x[j]) for i=1, j=1:size(x,1) ]
+ctranspose{T<:Number}(x::StridedMatrix{T}) = T[ conj(x[j,i]) for i=1:size(x,2), j=1:size(x,1) ]
 
 # set-like operators for vectors
 # These are moderately efficient, preserve order, and remove dupes.
 
-function intersect(vs...)
-    args_type = promote_type([eltype(v) for v in vs]...)
-    ret = Array(args_type,0)
-    for v_elem in vs[1]
+function intersect(v1, vs...)
+    ret = Array(eltype(v1),0)
+    for v_elem in v1
         inall = true
-        for i = 2:length(vs)
+        for i = 1:length(vs)
             if !in(v_elem, vs[i])
                 inall=false; break
             end
@@ -1589,9 +1593,12 @@ function intersect(vs...)
     end
     ret
 end
+
+promote_eltype() = None
+promote_eltype(v1, vs...) = promote_type(eltype(v1), promote_eltype(vs...))
+
 function union(vs...)
-    args_type = promote_type([eltype(v) for v in vs]...)
-    ret = Array(args_type,0)
+    ret = Array(promote_eltype(vs...),0)
     seen = Set()
     for v in vs
         for v_elem in v

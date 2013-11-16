@@ -103,24 +103,24 @@ Here, we happened to know that the first element of ``a`` would be an
 will raise a run-time error if the value is not of the expected type,
 potentially catching certain bugs earlier.
 
-Declare types of named arguments
+Declare types of keyword arguments
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Named arguments can have declared types::
+Keyword arguments can have declared types::
 
-    function with_named(x; name::Int = 1)
+    function with_keyword(x; name::Int = 1)
         ...
     end
 
-Functions are specialized on the types of named arguments, so these
+Functions are specialized on the types of keyword arguments, so these
 declarations will not affect performance of code inside the function.
 However, they will reduce the overhead of calls to the function that
-include named arguments.
+include keyword arguments.
 
-Functions with named arguments have near-zero overhead for call sites
+Functions with keyword arguments have near-zero overhead for call sites
 that pass only positional arguments.
 
-Passing dynamic lists of named arguments, as in ``f(x; names...)``,
+Passing dynamic lists of keyword arguments, as in ``f(x; keywords...)``,
 can be slow and should be avoided in performance-sensitive code.
 
 Break functions into multiple definitions
@@ -239,6 +239,14 @@ our own ``fill_twos!``.
 Functions like ``strange_twos`` occur when dealing with data of
 uncertain type, for example data loaded from an input file that might
 contain either integers, floats, strings, or something else.
+
+Fix deprecation warnings
+------------------------
+
+A deprecated function internally performs a lookup in order to
+print a relevant warning only once. This extra lookup can cause a
+significant slowdown, so all uses of deprecated functions should be
+modified as suggested by the warnings.
 
 Tweaks
 ------

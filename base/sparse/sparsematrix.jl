@@ -257,9 +257,11 @@ end
 
 ## sparse() can take its inputs in unsorted order (the parent method is now in jlsparse.jl)
 
-sparse(I,J,v::Number) = sparse(I, J, fill(v,length(I)), int(maximum(I)), int(maximum(J)), +)
+dimlub(I) = length(I)==0 ? 0 : int(maximum(I)) #least upper bound on required sparse matrix dimension
 
-sparse(I,J,V::AbstractVector) = sparse(I, J, V, int(maximum(I)), int(maximum(J)), +)
+sparse(I,J,v::Number) = sparse(I, J, fill(v,length(I)), dimlub(I), dimlub(J), +)
+
+sparse(I,J,V::AbstractVector) = sparse(I, J, V, dimlub(I), dimlub(J), +)
 
 sparse(I,J,v::Number,m,n) = sparse(I, J, fill(v,length(I)), int(m), int(n), +)
 
@@ -1291,9 +1293,9 @@ end
 # Create a sparse diagonal matrix by specifying multiple diagonals 
 # packed into a tuple, alongside their diagonal offsets and matrix shape
 
-function spdiagm_int(B::Tuple, d::Tuple)
+function spdiagm_internal(B, d)
     ndiags = length(d)
-    if length(B) != ndiags; throw(ArgumentError); end
+    if length(B) != ndiags; throw(ArgumentError("first argument should be a tuple of length(d)=$ndiags arrays of diagonals")); end
     ncoeffs = 0
     for vec in B
         ncoeffs += length(vec)
@@ -1327,19 +1329,19 @@ function spdiagm_int(B::Tuple, d::Tuple)
     return (I,J,V)
 end
 
-function spdiagm(B::Tuple, d::Tuple, m::Integer, n::Integer)
-    (I,J,V) = spdiagm_int(B, d)
+function spdiagm(B, d, m::Integer, n::Integer)
+    (I,J,V) = spdiagm_internal(B, d)
     return sparse(I,J,V,m,n)
 end
 
-function spdiagm(B::Tuple, d::Tuple)
-    (I,J,V) = spdiagm_int(B, d)
+function spdiagm(B, d)
+    (I,J,V) = spdiagm_internal(B, d)
     return sparse(I,J,V)
 end
 
-spdiagm(B::AbstractVector, d::Number, m, n) = spdiagm((B,), (d,), m, n)
+spdiagm(B::AbstractVector, d::Number, m::Integer, n::Integer) = spdiagm((B,), (d,), m, n)
 
-spdiagm(B::AbstractVector, d::Number) = spdiagm((B,), (d,))
+spdiagm(B::AbstractVector, d::Number=0) = spdiagm((B,), (d,))
 
 ## expand a colptr or rowptr into a dense index vector
 function expandptr{T<:Integer}(V::Vector{T})

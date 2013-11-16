@@ -647,14 +647,9 @@ static jl_value_t *intersect_typevar(jl_tvar_t *a, jl_value_t *b,
         }
     }
     else {
-        if (var == covariant) {
-            b = jl_type_intersect(a->ub, b, penv, eqc, var);
-            if (b == jl_bottom_type)
-                return b;
-        }
-        else if (!jl_is_typevar(b) || !((jl_tvar_t*)b)->bound) {
-            return (jl_value_t*)jl_bottom_type;
-        }
+        b = jl_type_intersect(a->ub, b, penv, eqc, var);
+        if (b == jl_bottom_type)
+            return b;
     }
     if (var == invariant && !jl_has_typevars_(b,0)) {
         int i;
@@ -1866,11 +1861,9 @@ static int jl_tuple_subtype_(jl_value_t **child, size_t cl,
         if (!morespecific && cseq && !pseq)
             return 0;
         if (ci >= cl)
-            return (pi>=pl || pseq);
+            return mode || pi>=pl || pseq;
         if (pi >= pl) {
-            if (mode && cseq && !pseq)
-                return 1;
-            return 0;
+            return mode;
         }
         jl_value_t *ce = child[ci];
         jl_value_t *pe = parent[pi];
@@ -1886,7 +1879,7 @@ static int jl_tuple_subtype_(jl_value_t **child, size_t cl,
             return 1;
 
         if (morespecific) {
-            // stop as soon as one element is strictly more specific
+            // at this point we know one element is strictly more specific
             if (!(jl_types_equal(ce,pe) ||
                   (jl_is_typevar(pe) &&
                    jl_types_equal(ce,((jl_tvar_t*)pe)->ub)))) {

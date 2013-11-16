@@ -1,7 +1,7 @@
 .. _man-faq:
 
 ****************************
- Frequently-Asked Questions
+ Frequently Asked Questions
 ****************************
 
 Sessions and the REPL
@@ -23,7 +23,7 @@ collector runs; you can force this to happen with ``gc()``.
 How can I modify the declaration of a type/immutable in my session?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Perhaps you've defined a type and and then realize you need to add a
+Perhaps you've defined a type and then realize you need to add a
 new field.  If you try this at the REPL, you get the error::
 
     ERROR: invalid redefinition of constant MyType

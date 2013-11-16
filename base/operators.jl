@@ -59,7 +59,7 @@ scalarmin(x::AbstractArray, y               ) = error("min: ordering is not well
 (|)(x::Integer) = x
 ($)(x::Integer) = x
 
-for op = (:+, :*, :&, :|, :$, :min, :max)
+for op = (:+, :*, :&, :|, :$, :min, :max, :kron)
     @eval begin
         # note: these definitions must not cause a dispatch loop when +(a,b) is
         # not defined, and must only try to call 2-argument definitions, so
@@ -201,21 +201,9 @@ function promote_shape(a::Dims, b::Dims)
 end
 
 # shape of array to create for getindex() with indexes I
-function index_shape(I...)
-    n = length(I)
-    while n > 0 && isa(I[n],Real); n-=1; end
-    tuple([length(I[i]) for i=1:n]...)
-end
-
-index_shape(i::Real) = ()
-index_shape(i)       = (length(i),)
-index_shape(i::Real,j::Real) = ()
-index_shape(i      ,j::Real) = (length(i),)
-index_shape(i      ,j)       = (length(i),length(j))
-index_shape(i::Real,j::Real,k::Real) = ()
-index_shape(i      ,j::Real,k::Real) = (length(i),)
-index_shape(i      ,j      ,k::Real) = (length(i),length(j))
-index_shape(i      ,j      ,k      ) = (length(i),length(j),length(k))
+# drop dimensions indexed with trailing scalars
+index_shape(I::Real...) = ()
+index_shape(i, I...) = tuple(length(i), index_shape(I...)...)
 
 # check for valid sizes in A[I...] = X where X <: AbstractArray
 function setindex_shape_check(X::AbstractArray, I...)

@@ -58,7 +58,7 @@ include("iterator.jl")
 import Core.Undef  # used internally by compiler
 include("inference.jl")
 
-# For OS sprcific stuff in I/O
+# For OS specific stuff in I/O
 include("osutils.jl")
 
 const DL_LOAD_PATH = ByteString[]
@@ -171,7 +171,6 @@ push!(I18n.CALLBACKS, Help.clear_cache)
 # sparse matrices and linear algebra
 include("sparse.jl")
 importall .SparseMatrix
-include("matrixmarket.jl")
 include("linalg.jl")
 importall .LinAlg
 include("broadcast.jl")
@@ -352,7 +351,7 @@ precompile(println, (TTY,))
 precompile(print, (TTY,Char))
 precompile(==, (Bool,Bool))
 precompile(try_include, (ASCIIString,))
-precompile(is_file_readable, (ASCIIString,))
+precompile(isfile, (ASCIIString,))
 precompile(include_from_node1, (ASCIIString,))
 precompile(source_path, (Nothing,))
 precompile(task_local_storage, ())

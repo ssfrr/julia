@@ -239,7 +239,7 @@ extern "C" void *jl_value_to_pointer(jl_value_t *jt, jl_value_t *v, int argn,
 static Value *julia_to_native(Type *ty, jl_value_t *jt, Value *jv,
                               jl_value_t *argex, bool addressOf,
                               int argn, jl_codectx_t *ctx,
-                              bool *mightNeedTempSpace)
+                              bool *mightNeedTempSpace, bool *needStackRestore)
 {
     Type *vt = jv->getType();
     if (ty == jl_pvalue_llvmt) {
@@ -254,6 +254,7 @@ static Value *julia_to_native(Type *ty, jl_value_t *jt, Value *jv,
             if (ty->isPointerTy() && ty->getContainedType(0)==vt) {
                 // pass the address of an alloca'd thing, not a box
                 // since those are immutable.
+                *needStackRestore = true;
                 Value *slot = builder.CreateAlloca(vt);
                 builder.CreateStore(jv, slot);
                 return builder.CreateBitCast(slot, ty);
@@ -765,6 +766,7 @@ static Value *emit_ccall(jl_value_t **args, size_t nargs, jl_codectx_t *ctx)
     int last_depth = ctx->argDepth;
     int nargty = jl_tuple_len(tt);
     bool needTempSpace = false;
+    bool needStackRestore = false;
     for(i=4; i < nargs+1; i+=2) {
         int ai = (i-4)/2;
         jl_value_t *argi = args[i];
@@ -795,10 +797,17 @@ static Value *emit_ccall(jl_value_t **args, size_t nargs, jl_codectx_t *ctx)
         else {
             arg = emit_unboxed(argi, ctx);
             if (jl_is_bitstype(expr_type(argi, ctx))) {
-                if (addressOf)
-                    arg = emit_unbox(largty->getContainedType(0), largty, arg);
-                else
-                    arg = emit_unbox(largty, PointerType::get(largty,0), arg);
+                Type *totype = addressOf ? largty->getContainedType(0) : largty;
+                Type *ptype  = addressOf ? largty : PointerType::get(largty,0);
+                Type *at = arg->getType();
+                if (at != jl_pvalue_llvmt && at != totype &&
+                    !(at->isPointerTy() && jargty==(jl_value_t*)jl_voidpointer_type)) {
+                    emit_type_error(arg, jargty, "ccall", ctx);
+                    arg = UndefValue::get(totype);
+                }
+                else {
+                    arg = emit_unbox(totype, ptype, arg);
+                }
             }
         }
 
@@ -810,21 +819,29 @@ static Value *emit_ccall(jl_value_t **args, size_t nargs, jl_codectx_t *ctx)
 #endif
 
         bool mightNeed=false;
+        bool nSR=false;
         argvals[ai+sret] = julia_to_native(largty, jargty, arg, argi, addressOf,
-                                           ai+1, ctx, &mightNeed);
+                                           ai+1, ctx, &mightNeed, &nSR);
         needTempSpace |= mightNeed;
+        needStackRestore |= nSR;
     }
     if (needTempSpace) {
         // save temp argument area stack pointer
         // TODO: inline this
         saveloc = CallInst::Create(save_arg_area_loc_func);
-        stacksave = CallInst::Create(Intrinsic::getDeclaration(jl_Module,
-                                                               Intrinsic::stacksave));
         if (savespot)
             instList.insertAfter(savespot, (Instruction*)saveloc);
         else
             instList.push_front((Instruction*)saveloc);
-        instList.insertAfter((Instruction*)saveloc, (Instruction*)stacksave);
+        savespot = (Instruction*)saveloc;
+    }
+    if (needStackRestore) {
+        stacksave = CallInst::Create(Intrinsic::getDeclaration(jl_Module,
+                                                               Intrinsic::stacksave));
+        if (savespot)
+            instList.insertAfter((Instruction*)savespot, (Instruction*)stacksave);
+        else
+            instList.push_front((Instruction*)stacksave);
     }
     // the actual call
     Value *ret = builder.CreateCall(
@@ -851,14 +868,16 @@ static Value *emit_ccall(jl_value_t **args, size_t nargs, jl_codectx_t *ctx)
         ((CallInst*)ret)->setCallingConv(cc);
     if (!sret)
         result = ret;
-    if (needTempSpace) {
-        // restore temp argument area stack pointer
-        assert(saveloc != NULL);
-        builder.CreateCall(restore_arg_area_loc_func, saveloc);
+    if (needStackRestore) {
         assert(stacksave != NULL);
         builder.CreateCall(Intrinsic::getDeclaration(jl_Module,
                                                      Intrinsic::stackrestore),
                            stacksave);
+    }
+    if (needTempSpace) {
+        // restore temp argument area stack pointer
+        assert(saveloc != NULL);
+        builder.CreateCall(restore_arg_area_loc_func, saveloc);
     }
     ctx->argDepth = last_depth;
     if (0) { // Enable this to turn on SSPREQ (-fstack-protector) on the function containing this ccall
