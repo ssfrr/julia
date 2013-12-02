@@ -1,7 +1,6 @@
-General Information for Windows
-===============================
+# General Information for Windows
 
-Please see the README at https://github.com/JuliaLang/julia/blob/master/README.md for more complete information about Julia. This is intended to only include information specific to using Julia on Windows.
+This file provides information specific to using Julia on Windows. Please see the [README](https://github.com/JuliaLang/julia/blob/master/README.md) for more complete information about Julia itself.
 
 Julia runs on Windows XP SP2 or later (including Windows Vista, Windows 7, and Windows 8). Both the 32-bit and 64-bit versions are supported. The 32-bit i686 binary will run on either 32-bit and 64-bit operating systems. The 64-bit x86_64 binary will only run on 64-bit Windows.
 
@@ -9,95 +8,99 @@ Downloading additional libraries (Tk, Cairo, etc) is not necessary. Julia's pack
 
 Julia requires that the lib and lib/julia directories be part of your `%PATH%` variable to startup. The `julia.bat` script will attempt to do this for you and is the recommended way of running julia on your system. The julia.bat file can be given arguments (e.g. `julia.bat -p 2 script.jl` for running script.jl on two processors) which will be passed directly to julia.exe.
 
-___________________________________________________
-Binary Downloads
-================
+# Binary Downloads
 
-Download the latest version of Julia from the downloads page at http://julialang.org/downloads/
+1. Install the full [7-Zip](http://www.7-zip.org/download.html) program.
+2. Download [the latest version of Julia](http://julialang.org/downloads)
+3. Extract the downloaded archive.
+4. Double-click the file `julia.bat` to launch Julia.
 
-Unzip the download to a folder. Do not attempt to run Julia without extracting the zip archive first (hint: it won't work). Double-click the file `julia.bat` to launch Julia.
+# Building from source
 
-Explore and have fun!
+## Building on Windows using MinGW/MSYS2
 
-Recommended external libraries (essential, if you use binary-only or source distribution, without batteries-included):
+1. Install the full [7-Zip](http://www.7-zip.org/download.html) program.
 
- - [7z](http://www.7-zip.org/download.html) (install the full program, not the command line version / 7za)
- - [msysGit](https://code.google.com/p/msysgit/downloads/list)
- - [TortoiseGit](https://code.google.com/p/tortoisegit/wiki/Download)
+2. Install [MinGW-builds](http://sourceforge.net/projects/mingwbuilds/), a Windows port of GCC.
+  a. Download the [MinGW-builds installer](http://downloads.sourceforge.net/project/mingwbuilds/mingw-builds-install/mingw-builds-install.exe) from the [MinGW-builds homepage](http://sourceforge.net/projects/mingwbuilds/). 
+  b. Run the installer. When prompted, choose:
+    - Version: the most recent version (these instructions were tested with 4.8.1)
+    - Architecture: x32 or x64 as desired 
+    - Threads: win32 (not posix)
+    - Exception: sjlj (for x32) or seh (for x64). Do not choose dwarf2.
+    - Build revision: most recent available (tested with 5)
+  c. Do **not** install to a directory with spaces in the name. You will have to change the default installation path. Choose instead something like
 
-Optional external libraries
+    C:\mingw-builds\x64-4.8.1-win32-seh-rev5\mingw64
 
- - MinGW/MSYS (as described below)
+3. Install and configure [MSYS2](http://sourceforge.net/projects/msys2), a minimal POSIX-like environment for Windows.
+  a. Download the latest archive from the [32-bit](http://sourceforge.net/projects/msys2/files/Alpha-versions/32-bit) or [64-bit](http://sourceforge.net/projects/msys2/files/Alpha-versions/64-bit) distribution as apprpriate.
+  b. Using [7-Zip](http://www.7-zip.org/download.html), extract the archive to a convenient directory, e.g. **C:\msys2\x64-20131022**. You may need to extract the tarball in a separate step.
+    - Some versions of this archive contain zero-byte files that clash with existing files. If prompted, choose to not overwrite all existing files.
+  c. Launch `msys2_shell.bat`, which will initialize MSYS2.
+  d. Edit the `/etc/fstab` file and append a line of the form
 
-___________________________________________________
-Source Compiling
-================
+    C:/mingw-builds/x64-4.8.1-win32-seh-rev5/mingw64 /mingw ext3 binary 0 0
 
-There are a few environments you can use to build julia. Making this easy requires getting the right environment.
+   Use the actual installation directory of MinGW from Step 2c. Consult the
+  [Cygwin manual](http://cygwin.com/cygwin-ug-net/using.html#mount-table) for
+  details of how to enter the directory name.
 
-Important Build Errata
-----------------------
+  e. Edit the `~/.bashrc` file and
+append the line
+   
+    export PATH=$PATH:/mingw/bin
 
-- You must use win32 threads version of MinGW. **Do not** use a POSIX threads version of MinGW.
-- Do not use GCC 4.6 or earlier or gcc-dw2, stuff will be broken.
-- Julia uses a [patched version](http://github.com/JuliaLang/readline/tarball/master)
-  of GNU Readline (this should be downloaded automatically by the build script).
-- Run `make win-extras` to download additional runtime dependencies not provided by default in MinGW.
+  f. `exit` the MSYS2 shell.
+  g. (Optional) Create a shortcut to the `msys2_shell.bat`. This shortcut can be used to launch the MSYS2 shell.
 
 
-Native Compile
---------------
+3. Build Julia and its dependencies from source.
+  a. Relaunch the MSYS2 shell and type
 
-On Windows, do not use the mingw/msys environment from http://www.mingw.org as it will miscompile the OpenBLAS math library
+    . ~/.bashrc
+    git clone https://github.com/JuliaLang/julia.git
+    cd julia
+    make
 
-The recommended way to setup your environment follows:
+  b. Some versions of PCRE (e.g. 8.31) will compile correctly but have a single
+  test fail with an error like
 
-1. Download and extract MinGW (e.g. x64-4.8.0-release-win32-seh-rev2.7z) to C:/MinGW (or similar location) from
-MinGW-builds [32-bit](http://sourceforge.net/projects/mingwbuilds/files/host-windows/releases/4.8.0/32-bit/threads-win32/sjlj/)
-or [64-bit](http://sourceforge.net/projects/mingwbuilds/files/host-windows/releases/4.8.0/64-bit/threads-win32/seh/) 
-2. Download and extract MSYS (e.g. msys+7za+wget+svn+git+mercurial+cvs-rev12.7z) to C:/MinGW/msys/1.0 (or similar location) from [MinGW-w64/MSYS](http://sourceforge.net/projects/mingwbuilds/files/external-binary-packages/)
-3. Add the line "C:/MinGW /mingw" to C:/MinGW/msys/1.0/etc/fstab (create the file if it doesn't exist)
-4. You will need to replace C:/MinGW/msys/1.0/bin/make.exe with C:/MinGW/msys/1.0/bin/make-old.exe or with a copy of make.exe extracted from [mingw-msys](http://sourceforge.net/projects/mingw/files/MSYS/Base/make/make-3.81-3/) (e.g. make-3.81-3-msys-1.0.13-bin.tar.lzma)
+    ** Failed to set locale "fr_FR
 
-Before proceeding, verify that python.exe from Python 2.7 is available in the MSYS PATH. If Python is not installed on your computer, [download Python 2.7](http://www.python.org/download/releases/2.7.5/) and install with default options (Python 2.7 is required to build LLVM; Python 3.3 will not work).
+  which will break the entire build. To circumvent the test and allow the rest
+  of the build to continue, create an empty `checked` file in the `deps/pcre*`
+  directory and rerun `make`.
 
-If you plan to build Cairo (for graphics), you'll also need to install [CMake](http://www.cmake.org/cmake/resources/software.html).
+## Cross-compile on Linux/Mac
 
-These sections assume you are familiar with building code. If you are not, you should stop reading now and go to the section on binaries. Regardless of which set of steps you followed above, you are now ready to compile julia. Open a unix shell by launching C:/MinGW/msys/1.0/msys.bat (or your favorite shortcut to that file). 
+### Setting up a cross-compiling environment on Ubuntu/Mac OSX (or general Linux distribution)
 
-Run the following commands in your build directory ($HOME at C:/MinGW/msys/1.0/home/your_name is fine)
+We need wine, a system compiler, and some downloaders.
 
-1. `git clone https://github.com/JuliaLang/julia.git`
-2. `cd julia`
-3. `make` Avoid using the `-j` argument to make. Windows will sometimes corrupt your build files. Additionally, make will probably lock up several times during the process, using 100% cpu, but not show progress. The only solution appears to be to kill make from the Task Manager and rerunning make. It should pickup where it left off. Expect this to take a very long time (dozens of hours is not uncommon).
+On Ubuntu:
 
-Running julia can be done in two ways:
+    apt-get install wine subversion cvs gcc wget p7zip-full
 
-1. `make run-julia[-release|-debug] [DEFAULT_REPL=(basic|readline)]` (e.g. `make run-julia`)
-2. Launching the `julia.bat` script in usr/bin
+On Mac: Install
+- [XCode](http://developer.apple.com/xcode)
+- XCode command line tools:
 
-Cross-Compile
--------------
+    xcode-select --install
 
-If you prefer to cross-compile, the following steps should get you started.
+- [XQuartz](http://xquartz.macosforge.org/)
+- [Homebrew](http://mxcl.github.io/homebrew/)
+- Wine and wget: 
 
-### Ubuntu and Mac Dependencies (these steps will work for almost any linux platform)
-
-First, you will need to ensure your system has the required dependencies. We need wine, a system compiler, and some downloaders.
-
-On Ubuntu: ```apt-get install wine subversion cvs gcc wget p7zip-full```
-
-On Mac: Install XCode, XCode command line tools, X11 (now [XQuartz](http://xquartz.macosforge.org/)),
-and [MacPorts](http://www.macports.org/install.php) or [Homebrew](http://mxcl.github.io/homebrew/).
-Then run ```port install wine wget``` or ```brew install wine wget```, as appropriate.
+    brew install wine wget
 
 On Both:
 
-Unfortunately, the version of gcc installed by Ubuntu is currently 4.6, which does not compile OpenBLAS correctly.
-On Mac, the situation is the same: the version in MacPorts is very old and Homebrew does not have it. So first we need to get
-a cross-compile version of gcc. Most binary packages appear to not include gfortran, so we will need to compile it
-from source (or ask @vtjnash to send you a tgz of my build). This is typically quite a bit of work, so we will use
-[this script](https://code.google.com/p/mingw-w64-dgn/) to make it easy. 
+Versions of gcc that are 4.6.x or older do not compile OpenBLAS correctly.
+Sometimes gfortran is also unavailable. You may follow these instructions to
+obtain a cross-compiling gcc (or obtain an archive copy from @vtjnash). This is
+typically quite a bit of work, so we will use [this
+script](https://code.google.com/p/mingw-w64-dgn/) to make it easy. 
 
 1. `svn checkout http://mingw-w64-dgn.googlecode.com/svn/trunk/ mingw-w64-dgn`
 2. `cd mingw-w64-dgn`
@@ -124,7 +127,9 @@ Note: for systems that support rpm-based package managers, the OpenSUSE build se
 ### Arch Linux Dependencies
 
 1. Install the following packages from the official Arch repository:
-`sudo pacman -S cloog gcc-ada libmpc p7zip ppl subversion zlib`
+
+    sudo pacman -S cloog gcc-ada libmpc p7zip ppl subversion zlib
+
 2. The rest of the prerequisites consist of the mingw-w64 packages, which are available in the AUR Arch repository. They must be installed exactly in the order they are given or else their installation will fail. The `yaourt` package manager is used for illustration purposes; you may instead follow the [Arch instructions for installing packages from AUR](https://wiki.archlinux.org/index.php/Arch_User_Repository#Installing_packages) or may use your preferred package manager. To start with, install `mingw-w64-binutils` via the command
 `yaourt -S mingw-w64-binutils`
 3. `yaourt -S mingw-w64-headers-svn`
@@ -144,11 +149,30 @@ Note: for systems that support rpm-based package managers, the OpenSUSE build se
 Finally, the build and install process for Julia:
 
 1. `git clone https://github.com/JuliaLang/julia.git julia-win32`
-2. `echo override XC_HOST = i686-w64-mingw32 >> Make.user`
+2. Set the cross-compile host architecture.
+  a. For 32-bit windows:
+
+    echo override XC_HOST = i686-w64-mingw32 >> Make.user
+
+  b. For 32-bit windows:
+
+    echo override XC_HOST = x86_64-w64-mingw32 >> Make.user`
+
 3. `echo override DEFAULT_REPL = basic >> Make.user`
 4. `make`
-5. `make win-extras` (Necessary before running `make dist`p)
-4. `make dist`
-6. move the julia-* directory / zip file to the target machine
+5. `make win-extras`
+6. `make run-julia[-release|-debug] [DEFAULT_REPL=(basic|readline)]` (e.g. `make run-julia`)
+7. Launch the `julia.bat` script in `usr/bin` to see if it works
+8. `make dist`
+9. move the julia-* directory / zip file to the target machine
 
-If you are building for 64-bit windows, the steps are essentially the same. Just replace i686 in XC_HOST with x86_64. (note: on Mac, wine only runs in 32-bit mode)
+### Troubleshooting
+
+- On the Mac, wine only runs in 32-bit mode.
+- Do not use GCC 4.6 or earlier or gcc-dw2, stuff will be broken.
+- Julia uses a [patched version](http://github.com/JuliaLang/readline/tarball/master)
+  of GNU Readline (this should be downloaded automatically by the build script).
+- Run `make win-extras` to download additional runtime dependencies not provided by default in MinGW.
+- Do not use the mingw/msys environment from [mingw.org](http://www.mingw.org) as it will miscompile the OpenBLAS math library.
+- If you plan to build Cairo (for graphics), you'll also need to install [CMake](http://www.cmake.org/cmake/resources/software.html).
+
