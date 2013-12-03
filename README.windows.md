@@ -34,11 +34,17 @@ Julia requires that the lib and lib/julia directories be part of your `%PATH%` v
     C:\mingw-builds\x64-4.8.1-win32-seh-rev5\mingw64
 
 3. Install and configure [MSYS2](http://sourceforge.net/projects/msys2), a minimal POSIX-like environment for Windows.
-  a. Download the latest archive from the [32-bit](http://sourceforge.net/projects/msys2/files/Alpha-versions/32-bit) or [64-bit](http://sourceforge.net/projects/msys2/files/Alpha-versions/64-bit) distribution as apprpriate.
-  b. Using [7-Zip](http://www.7-zip.org/download.html), extract the archive to a convenient directory, e.g. **C:\msys2\x64-20131022**. You may need to extract the tarball in a separate step.
+  a. Download the latest base [32-bit](http://sourceforge.net/projects/msys2/files/Base/32-bit) or [64-bit](http://sourceforge.net/projects/msys2/files/Base/64-bit) distribution as apprpriate.
+  b. Using [7-Zip](http://www.7-zip.org/download.html), extract the archive to a convenient directory, e.g. **C:\msys2\x64-20131126**. You may need to extract the tarball in a separate step. This will create an additional `msys32`/`msys64` subdirectory.
     - Some versions of this archive contain zero-byte files that clash with existing files. If prompted, choose to not overwrite all existing files.
   c. Launch `msys2_shell.bat`, which will initialize MSYS2.
-  d. Edit the `/etc/fstab` file and append a line of the form
+  d. Install the necessary packages:
+
+    pacman-key --init #Download keys
+    pacman -Syu #Update package database and full system upgrade
+    pacman -S git make patch python tar
+    
+  e. Edit the `/etc/fstab` file and append a line of the form
 
     C:/mingw-builds/x64-4.8.1-win32-seh-rev5/mingw64 /mingw ext3 binary 0 0
 
@@ -46,8 +52,7 @@ Julia requires that the lib and lib/julia directories be part of your `%PATH%` v
   [Cygwin manual](http://cygwin.com/cygwin-ug-net/using.html#mount-table) for
   details of how to enter the directory name.
 
-  e. Edit the `~/.bashrc` file and
-append the line
+  e. Edit the `~/.bashrc` file and append the line
    
     export PATH=$PATH:/mingw/bin
 
@@ -58,7 +63,7 @@ append the line
 3. Build Julia and its dependencies from source.
   a. Relaunch the MSYS2 shell and type
 
-    . ~/.bashrc
+    . ~/.bashrc #Some versions of MSYS do not run this automatically
     git clone https://github.com/JuliaLang/julia.git
     cd julia
     make
