@@ -371,8 +371,6 @@ function _start()
     fdwatcher_reinit()
     # Initialize RNG
     Random.librandom_init()
-    # Ensure PCRE is compatible with the compiled reg-exes
-    PCRE.check_pcre()
     # Check that BLAS is correctly built
     check_blas()
     LinAlg.init()

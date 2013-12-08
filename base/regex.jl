@@ -4,10 +4,10 @@ include("pcre.jl")
 
 const DEFAULT_OPTS = PCRE.JAVASCRIPT_COMPAT | PCRE.UTF8 | PCRE.NO_UTF8_CHECK
 
-immutable Regex
+type Regex
     pattern::ByteString
     options::Uint32
-    regex::Array{Uint8}
+    regex::Ptr{Uint8}
 
     function Regex(pattern::String, options::Integer)
         pattern = bytestring(pattern)
@@ -15,8 +15,7 @@ immutable Regex
         if (options & ~PCRE.OPTIONS_MASK) != 0
             error("invalid regex options: $options")
         end
-        regex = PCRE.compile(pattern, options & PCRE.COMPILE_MASK)
-        new(pattern, options, regex)
+        compile(new(pattern, options, C_NULL))
     end
 end
 
@@ -32,6 +31,13 @@ function Regex(pattern::String, flags::String)
     Regex(pattern, options)
 end
 Regex(pattern::String) = Regex(pattern, DEFAULT_OPTS)
+
+function compile(regex::Regex)
+    if regex.regex == C_NULL
+        regex.regex = PCRE.compile(regex.pattern, regex.options & PCRE.COMPILE_MASK)
+    end
+    regex
+end
 
 macro r_str(pattern, flags...) Regex(pattern, flags...) end
 macro r_mstr(pattern, flags...) Regex(pattern, flags...) end
@@ -83,14 +89,14 @@ function show(io::IO, m::RegexMatch)
 end
 
 ismatch(r::Regex, s::String, offset::Integer=0) =
-    PCRE.exec(r.regex, C_NULL, bytestring(s), offset, r.options & PCRE.EXECUTE_MASK, false)
+    PCRE.exec(compile(r).regex, C_NULL, bytestring(s), offset, r.options & PCRE.EXECUTE_MASK, false)
 ismatch(r::Regex, s::SubString, offset::Integer=0) =
-    PCRE.exec(r.regex, C_NULL, s, offset, r.options & PCRE.EXECUTE_MASK, false)
+    PCRE.exec(compile(r).regex, C_NULL, s, offset, r.options & PCRE.EXECUTE_MASK, false)
 
 function match(re::Regex, str::UTF8String, idx::Integer, add_opts::Uint32=uint32(0),
                extra::Ptr{Void}=C_NULL)
     opts = re.options & PCRE.EXECUTE_MASK | add_opts
-    m, n = PCRE.exec(re.regex, extra, str, idx-1, opts, true)
+    m, n = PCRE.exec(compile(re).regex, extra, str, idx-1, opts, true)
     if isempty(m); return nothing; end
     mat = SubString(str, m[1]+1, m[2])
     cap = Union(Nothing,SubString{UTF8String})[
@@ -107,7 +113,8 @@ match(r::Regex, s::String, i::Integer) =
     error("regex matching is only available for bytestrings; use bytestring(s) to convert")
 
 function matchall(re::Regex, str::UTF8String, overlap::Bool=false)
-    extra = PCRE.study(re.regex, PCRE.STUDY_JIT_COMPILE)
+    regex = compile(re).regex
+    extra = PCRE.study(regex, PCRE.STUDY_JIT_COMPILE)
     n = length(str.data)
     matches = SubString{UTF8String}[]
     offset = int32(0)
@@ -119,7 +126,7 @@ function matchall(re::Regex, str::UTF8String, overlap::Bool=false)
         result = ccall((:pcre_exec, :libpcre), Int32,
                        (Ptr{Void}, Ptr{Void}, Ptr{Uint8}, Int32,
                        Int32, Int32, Ptr{Int32}, Int32),
-                       re.regex, extra, str, n,
+                       regex, extra, str, n,
                        offset, prevempty ? opts_nonempty : opts, ovec, 3)
 
         if result < 0
@@ -154,7 +161,7 @@ function search(str::Union(ByteString,SubString), re::Regex, idx::Integer)
         throw(BoundsError())
     end
     opts = re.options & PCRE.EXECUTE_MASK
-    m, n = PCRE.exec(re.regex, C_NULL, str, idx-1, opts, true)
+    m, n = PCRE.exec(compile(re).regex, C_NULL, str, idx-1, opts, true)
     isempty(m) ? (0:-1) : ((m[1]+1):prevind(str,m[2]+1))
 end
 search(s::String, r::Regex, idx::Integer) =
@@ -168,13 +175,13 @@ immutable RegexMatchIterator
     extra::Ptr{Void}
 
     function RegexMatchIterator(regex::Regex, string::String, ovr::Bool=false)
-        extra = PCRE.study(regex.regex, PCRE.STUDY_JIT_COMPILE)
+        extra = PCRE.study(compile(regex).regex, PCRE.STUDY_JIT_COMPILE)
         new(regex, string, ovr, extra)
     end
 end
-
+compile(itr::RegexMatchIterator) = (compile(itr.regex); itr)
 eltype(itr::RegexMatchIterator) = RegexMatch
-start(itr::RegexMatchIterator) = match(itr.regex, itr.string, 1, uint32(0), itr.extra)
+start(itr::RegexMatchIterator) = match(compile(itr).regex, itr.string, 1, uint32(0), itr.extra)
 done(itr::RegexMatchIterator, prev_match) = (prev_match == nothing)
 
 # Assumes prev_match is not nothing
