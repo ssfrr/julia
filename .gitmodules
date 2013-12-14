@@ -10,3 +10,9 @@
 [submodule "doc/juliadoc"]
 	path = doc/juliadoc
 	url = git://github.com/JuliaLang/JuliaDoc.git
+[submodule "deps/Faddeeva"]
+	path = deps/Faddeeva
+	url = git@github.com:JuliaLang/Faddeeva.git
+[submodule "deps/amos"]
+	path = deps/amos
+	url = git@github.com:JuliaLang/amos.git
