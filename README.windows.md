@@ -43,6 +43,7 @@ Julia requires that the lib and lib/julia directories be part of your `%PATH%` v
     pacman-key --init #Download keys
     pacman -Syu #Update package database and full system upgrade
     pacman -S diffutils git m4 make patch python2 tar
+    ln -s /usr/bin/python{2.exe,} #Fixes python2 not found error
     
   5. Edit the `/etc/fstab` file and append a line of the form
 
