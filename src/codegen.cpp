@@ -451,10 +451,19 @@ extern "C" void jl_generate_fptr(jl_function_t *f)
 
         Function *llvmf = (Function*)li->functionObject;
         
+#ifdef USE_MCJIT
         li->fptr = (jl_fptr_t)jl_ExecutionEngine->getFunctionAddress(llvmf->getName());
+#else
+        li->fptr = (jl_fptr_t)jl_ExecutionEngine->getPointerToFunction(llvmf);
+#endif
         assert(li->fptr != NULL);
-        if (li->cFunctionObject != NULL)
+        if (li->cFunctionObject != NULL) {
+#ifdef USE_MCJIT
             (void)jl_ExecutionEngine->getFunctionAddress(((Function*)li->cFunctionObject)->getName());
+#else
+            (void)jl_ExecutionEngine->getPointerToFunction((Function*)li->cFunctionObject);
+#endif
+        }
         JL_SIGATOMIC_END();
         if (!imaging_mode) {
             llvmf->deleteBody();
@@ -3031,7 +3040,7 @@ static Function *emit_function(jl_lambda_info_t *lam, bool cstyle)
 
         fil = dbuilder.createFile(filename, ".");
         #ifndef LLVM34
-        SP = dbuilder.createFunction((DIDescriptor)dbuilder->getCU(),
+        SP = dbuilder.createFunction((DIDescriptor)dbuilder.getCU(),
         #else 
         SP = dbuilder.createFunction(CU,
         #endif
@@ -3429,7 +3438,12 @@ extern "C" void jl_fptr_to_llvm(void *fptr, jl_lambda_info_t *lam, int specsig)
         }
         Type *rt = (jlrettype == (jl_value_t*)jl_nothing->type ? T_void : julia_type_to_llvm(jlrettype));
         Function *f = Function::Create(FunctionType::get(rt, fsig, false),
+#ifdef USE_MCJIT
                                        Function::ExternalLinkage, funcName, shadow_module);
+#else
+                                       Function::ExternalLinkage, funcName, jl_Module);
+#endif
+
         if (lam->cFunctionObject == NULL) {
             lam->cFunctionObject = (void*)f;
             lam->cFunctionID = jl_assign_functionID(f);
@@ -3437,7 +3451,11 @@ extern "C" void jl_fptr_to_llvm(void *fptr, jl_lambda_info_t *lam, int specsig)
         add_named_global(f, (void*)fptr);
     }
     else {
+#ifdef USE_MCJIT
         Function *f = jlcall_func_to_llvm(funcName, fptr, shadow_module);
+#else
+        Function *f = jlcall_func_to_llvm(funcName, fptr, jl_Module);
+#endif
         if (lam->functionObject == NULL) {
             lam->functionObject = (void*)f;
             lam->functionID = jl_assign_functionID(f);
