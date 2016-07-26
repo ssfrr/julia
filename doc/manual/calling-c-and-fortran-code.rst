@@ -1083,9 +1083,18 @@ To do this, create a ``AsyncCondition`` object and wait on it::
   cond = Base.AsyncCondition()
   wait(cond)
 
-The callback you pass to C should only execute a :func:`ccall` to
-``:uv_async_send``, passing ``cb.handle`` as the argument,
-taking care to avoid any allocations or other interactions with the Julia runtime.
+You then create your C-callable callback that you will hand to your C library::
+
+  function wakeup()
+      ccall(:uv_async_send, Cint, (Ptr{Void}, ), cond.handle)
+      nothing
+  end
+  wakeup_cb = cfunction(wakeup, Void, ())
+
+At this point ``wakeup_cb`` can be passed to your C library that expects a
+function pointer (make sure the arguments and return value for your callback
+match what the library expects). Make sure to avoid any allocations or other
+interactions with the Julia runtime within your callback.
 
 Note that events may be coalesced, so multiple calls to uv_async_send
 may result in a single wakeup notification to the condition.
