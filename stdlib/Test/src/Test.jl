@@ -588,8 +588,9 @@ Do any final processing necessary for the given testset. This is called by the
 function is to record the testset to the parent's results list, using
 `get_testset`.
 
-Custom `AbstractTestSet` should call `record` on their parent (if there is one)
-to add themselves to the tree of test results. This might be implemented as:
+Custom `AbstractTestSet` subtypes should call `record` on their parent (if there
+is one) to add themselves to the tree of test results. This might be implemented
+as:
 
 ```
 if get_testset_depth() != 0
